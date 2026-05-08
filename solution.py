@@ -9,7 +9,7 @@ import warnings
 warnings.filterwarnings('ignore')
 
 # ========================== 读取数据 ==========================
-df = pd.read_csv('/Users/xuyunze/Desktop/数学建模/附件1：样例数据.csv')
+df = pd.read_csv('题目（处理后）/附件1：样例数据.csv')
 
 # 列名映射（简化后续使用）
 col_map = {
@@ -29,7 +29,7 @@ col_map = {
 }
 df.rename(columns=col_map, inplace=True)
 
-# 临床正常范围（用于构造血脂异常项数）
+# 临床正常范围（用于构造血脂异常项数，仅含四项血脂指标）
 def count_abnormal(row):
     cnt = 0
     if row['tc'] < 3.1 or row['tc'] > 6.2: cnt += 1
@@ -37,6 +37,15 @@ def count_abnormal(row):
     if row['ldl'] < 2.07 or row['ldl'] > 3.1: cnt += 1
     if row['hdl'] < 1.04 or row['hdl'] > 1.55: cnt += 1
     return cnt
+
+# 血尿酸异常标记（性别特异性，独立变量，不混入血脂异常项数）
+def uric_abnormal(row):
+    gender = row['gender']  # 0=女, 1=男
+    uric_low = 208 if gender == 1 else 155
+    uric_high = 428 if gender == 1 else 357
+    return 1 if (row['uric'] < uric_low or row['uric'] > uric_high) else 0
+
+df['uric_abnormal'] = df.apply(uric_abnormal, axis=1)
 
 df['abnormal_cnt'] = df.apply(count_abnormal, axis=1)
 
@@ -57,7 +66,71 @@ corr_disease = {col: stats.pearsonr(df[col], df['disease'])[0] for col in indica
 print("\n【2】各指标与高血脂标签的点二列相关系数：")
 print(pd.Series(corr_disease).sort_values(ascending=False).round(4))
 
-# ---------- 1.2 逐步Logistic回归：筛选预警高血脂的关键指标 ----------
+# ---------- 1.2 多元线性回归 + 组间差异检验：筛选表征痰湿体质严重程度的关键指标 ----------
+# 题目要求筛选"能有效表征痰湿体质严重程度、且能预警高血脂发病风险"的关键指标
+# 由于痰湿质积分与血常规指标可能呈非线性关系，采用三种方法并行分析：
+#   (a) Spearman相关（捕捉单调非线性关系）
+#   (b) 多元线性回归（控制混杂因素后的独立效应）
+#   (c) 组间差异检验（痰湿体质标签组 vs 非痰湿体质标签组）
+
+# (a) Spearman相关
+spearman_phlegm = {col: stats.spearmanr(df[col], df['phlegm'])[0] for col in indicators}
+print("\n【1.2a】Spearman相关系数（痰湿质积分）：")
+print(pd.Series(spearman_phlegm).sort_values(ascending=False).round(4))
+
+# (b) 多元线性回归
+X_phlegm = sm.add_constant(df[indicators])
+ols_model = sm.OLS(df['phlegm'], X_phlegm).fit()
+print("\n【1.2b】多元线性回归：血常规与活动量表对痰湿质积分的解释力")
+print(f"    R² = {ols_model.rsquared:.4f}, 调整R² = {ols_model.rsquared_adj:.4f}")
+print("    标准化系数（Beta）及p值：")
+scaler = StandardScaler()
+X_scaled = scaler.fit_transform(df[indicators])
+ols_std = sm.OLS(df['phlegm'], sm.add_constant(X_scaled)).fit()
+ols_summary = pd.DataFrame({
+    '指标': indicators,
+    'coef_std': ols_std.params[1:].values,
+    'pvalue': ols_model.pvalues[1:].values
+})
+ols_summary['abs_std'] = ols_summary['coef_std'].abs()
+print(ols_summary.sort_values('abs_std', ascending=False).round(4))
+
+# (c) 组间差异检验：痰湿体质标签(constitution==5) vs 其他体质
+phlegm_group = df[df['constitution'] == 5]
+other_group = df[df['constitution'] != 5]
+print(f"\n【1.2c】组间差异检验（痰湿质 n={len(phlegm_group)} vs 非痰湿质 n={len(other_group)}）：")
+group_tests = []
+for col in indicators:
+    # Mann-Whitney U检验（不假设正态分布）
+    stat, pval = stats.mannwhitneyu(phlegm_group[col], other_group[col], alternative='two-sided')
+    # 效应量：秩次相关系数 r = Z / sqrt(N)
+    z = stats.norm.ppf(1 - pval/2)
+    r_effect = z / np.sqrt(len(df))
+    group_tests.append({'指标': col, 'pvalue': pval, '效应量r': r_effect,
+                        '痰湿质中位数': phlegm_group[col].median(),
+                        '非痰湿质中位数': other_group[col].median()})
+group_df = pd.DataFrame(group_tests)
+print(group_df.sort_values('效应量r', key=abs, ascending=False).round(4))
+
+# 综合筛选：采用"多数投票"策略，满足以下任一条件即入选：
+#   - Spearman |r| > 0.10 且 p < 0.05
+#   - 组间检验 p < 0.05 且 |效应量| > 0.05
+#   - 与高血脂点二列 |r| > 0.15 且 p < 0.05
+print("\n【1.3】综合筛选（既表征痰湿严重程度、又预警高血脂的指标）：")
+corr_disease_s = pd.Series(corr_disease)
+joint_score = pd.DataFrame({'指标': indicators})
+joint_score['spearman_r'] = [abs(spearman_phlegm[c]) for c in indicators]
+joint_score['group_p'] = group_df.set_index('指标').loc[indicators, 'pvalue'].values
+joint_score['group_effect'] = [abs(v) for v in group_df.set_index('指标').loc[indicators, '效应量r'].values]
+joint_score['r_高血脂'] = [abs(corr_disease_s[c]) for c in indicators]
+# 标记入选条件
+cond1 = joint_score['spearman_r'] > 0.10
+cond2 = (joint_score['group_p'] < 0.05) & (joint_score['group_effect'] > 0.05)
+cond3 = joint_score['r_高血脂'] > 0.15
+joint_score['入选'] = cond1 | cond2 | cond3
+print(joint_score[joint_score['入选']].sort_values('r_高血脂', ascending=False).round(4))
+
+# ---------- 1.4 逐步Logistic回归：筛选预警高血脂的关键指标 ----------
 
 def stepwise_logit(X, y, threshold_in=0.05, threshold_out=0.10):
     """基于AIC的前向+后向逐步Logistic回归"""
@@ -98,16 +171,16 @@ def stepwise_logit(X, y, threshold_in=0.05, threshold_out=0.10):
     return included
 
 selected_features = stepwise_logit(df[indicators], df['disease'])
-print(f"\n【3】逐步Logistic回归筛选的关键指标：{selected_features}")
+print(f"\n【1.4】逐步Logistic回归筛选的关键指标：{selected_features}")
 
-# ---------- 1.3 Logistic回归：九种体质对高血脂的贡献度 ----------
+# ---------- 1.5 Logistic回归：九种体质对高血脂的贡献度 ----------
 constitution_cols = ['pinghe', 'qixu', 'yangxu', 'yinxu', 'phlegm', 'shire', 'xueyu', 'qiyu', 'tebing']
 X_const = df[constitution_cols]
 X_const_scaled = StandardScaler().fit_transform(X_const)
 X_const_const = sm.add_constant(X_const_scaled)
 
 logit_model = sm.Logit(df['disease'], X_const_const).fit(disp=0)
-print("\n【4】九种体质对高血脂发病风险的Logistic回归结果（标准化系数）：")
+print("\n【1.5】九种体质对高血脂发病风险的Logistic回归结果（标准化系数）：")
 coef_df = pd.DataFrame({
     '体质': constitution_cols,
     'coef': logit_model.params[1:].values,
@@ -291,9 +364,10 @@ for sid in sample_ids:
     p = df[df['id'] == sid].iloc[0]
     plan = optimize_intervention(p)
     plans_123.append(plan)
+    lvl_name = ('基础', '中度', '强化')
     print(f"样本ID {int(plan['id'])}:")
     print(f"  患者特征: 痰湿积分={plan['s0']}, 年龄组={int(p['age_group'])}, 活动总分={p['mobility']}")
-    print(f"  调理分级: {plan['x_level']}级 ({'基础/中度/强化'[plan['x_level']-1]}调理, {C_TREAT[plan['x_level']]}元/月)")
+    print(f"  调理分级: {plan['x_level']}级 ({lvl_name[plan['x_level']-1]}调理, {C_TREAT[plan['x_level']]}元/月)")
     print(f"  活动强度: {plan['y_level']}级 (单次{C_ACT[plan['y_level']]}元)")
     print(f"  每周频率: {plan['freq']}次")
     print(f"  6个月总成本: {plan['cost']}元")
