@@ -1,12 +1,23 @@
 import pandas as pd
 import numpy as np
+import matplotlib
+matplotlib.use('Agg')
+import matplotlib.pyplot as plt
+import seaborn as sns
 from sklearn.linear_model import LogisticRegression
-from sklearn.discriminant_analysis import LinearDiscriminantAnalysis
+from sklearn.model_selection import StratifiedKFold
+from sklearn.metrics import (accuracy_score, recall_score, f1_score,
+                             roc_auc_score, roc_curve, confusion_matrix)
 from sklearn.preprocessing import StandardScaler
 from scipy import stats
 import statsmodels.api as sm
+from statsmodels.stats.outliers_influence import variance_inflation_factor
+import os
 import warnings
 warnings.filterwarnings('ignore')
+
+# 设置随机种子，确保可复现
+np.random.seed(42)
 
 # ========================== 读取数据 ==========================
 df = pd.read_csv('题目（处理后）/附件1：样例数据.csv')
@@ -190,6 +201,15 @@ coef_df = pd.DataFrame({
 coef_df['abs_coef'] = coef_df['coef'].abs()
 print(coef_df.sort_values('abs_coef', ascending=False).round(4))
 
+# ---------- 1.6 VIF（方差膨胀因子）计算 ----------
+vif_data = pd.DataFrame({
+    '体质': constitution_cols,
+    'VIF': [variance_inflation_factor(X_const.values, i)
+            for i in range(X_const.shape[1])]
+})
+print("\n【1.6】九种体质积分的VIF值：")
+print(vif_data.round(2))
+
 print("\n" + "=" * 60)
 print("问题2：三级风险预警模型")
 print("=" * 60)
@@ -243,14 +263,55 @@ combo3 = df[(df[constitution_cols].idxmax(axis=1) == 'phlegm') & (df['abnormal_c
 p3 = combo3['risk_level'].value_counts(normalize=True).get('高', 0)
 print(f"    痰湿为最高分体质 & 血脂异常>=2项  → 高风险概率: {p3:.2%} (n={len(combo3)})")
 
-# ---------- 2.4 Fisher线性判别验证 ----------
-# 只保留有效分类的样本
-valid_idx = df['risk_level'].notna()
-lda = LinearDiscriminantAnalysis().fit(X_risk_scaled[valid_idx], df.loc[valid_idx, 'risk_level'].cat.codes)
-print("\n【5】Fisher线性判别系数（验证风险分层）：")
-lda_classes = lda.classes_
-lda_df = pd.DataFrame(lda.coef_, columns=risk_features, index=[f'基准→{c}' for c in lda_classes])
-print(lda_df.round(4))
+# ---------- 2.4 K折分层交叉验证 ----------
+# 将三级风险转为二分类：高风险(1) vs 非高风险(0)，用于ROC/AUC
+df['high_risk'] = (df['risk_level'] == '高').astype(int)
+
+skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
+acc_scores, rec_scores, f1_scores, auc_scores = [], [], [], []
+
+print("\n【5】5折分层交叉验证结果（高风险 vs 非高风险）：")
+for fold, (train_idx, test_idx) in enumerate(skf.split(X_risk_scaled, df['high_risk']), 1):
+    X_train, X_test = X_risk_scaled[train_idx], X_risk_scaled[test_idx]
+    y_train, y_test = df['high_risk'].iloc[train_idx], df['high_risk'].iloc[test_idx]
+
+    logit_cv = LogisticRegression(max_iter=1000, random_state=42).fit(X_train, y_train)
+    y_prob = logit_cv.predict_proba(X_test)[:, 1]
+    y_pred = (y_prob >= 0.5).astype(int)
+
+    acc_scores.append(accuracy_score(y_test, y_pred))
+    rec_scores.append(recall_score(y_test, y_pred, zero_division=0))
+    f1_scores.append(f1_score(y_test, y_pred, zero_division=0))
+    auc_scores.append(roc_auc_score(y_test, y_prob))
+
+    print(f"  Fold {fold}: Acc={acc_scores[-1]:.4f}, Recall={rec_scores[-1]:.4f}, "
+          f"F1={f1_scores[-1]:.4f}, AUC={auc_scores[-1]:.4f}")
+
+print(f"\n  均值: Acc={np.mean(acc_scores):.4f}, Recall={np.mean(rec_scores):.4f}, "
+      f"F1={np.mean(f1_scores):.4f}, AUC={np.mean(auc_scores):.4f}")
+
+# 全量拟合用于ROC曲线
+logit_full = LogisticRegression(max_iter=1000, random_state=42).fit(X_risk_scaled, df['high_risk'])
+prob_full = logit_full.predict_proba(X_risk_scaled)[:, 1]
+fpr, tpr, _ = roc_curve(df['high_risk'], prob_full)
+
+# ---------- 2.5 风险评分权重敏感性分析 ----------
+# 使用固定阈值（基准阈值）观察权重扰动对分层比例的影响
+print("\n【6】风险评分权重敏感性分析（固定阈值，主观权重 ±20% 扰动）：")
+base_weights = (0.5, 0.3, 0.2)
+perturbations = [
+    (0.4, 0.36, 0.24),   # w1-20%, w2+20%, w3+20%（归一化近似）
+    (0.6, 0.24, 0.16),   # w1+20%, w2-20%, w3-20%
+    (0.5, 0.24, 0.26),   # w2-20%, w3+30%
+    (0.5, 0.36, 0.14),   # w2+20%, w3-30%
+]
+base_dist = df['risk_level'].value_counts(normalize=True).sort_index()
+print(f"  基准权重 {base_weights}: 低={base_dist.get('低',0):.3f}, 中={base_dist.get('中',0):.3f}, 高={base_dist.get('高',0):.3f}")
+for w1, w2, w3 in perturbations:
+    rs = w1 * prob + w2 * (df['phlegm'] / 100) + w3 * (df['abnormal_cnt'] / 4)
+    rl = pd.cut(rs, bins=[-np.inf, low_threshold, high_threshold, np.inf], labels=['低', '中', '高'])
+    dist = rl.value_counts(normalize=True).sort_index()
+    print(f"  权重 ({w1},{w2},{w3}): 低={dist.get('低',0):.3f}, 中={dist.get('中',0):.3f}, 高={dist.get('高',0):.3f}")
 
 print("\n" + "=" * 60)
 print("问题3：痰湿体质患者干预方案优化")
@@ -293,20 +354,35 @@ def get_max_activity_intensity(age_group, mobility_score):
 
     return min(y_max_age, y_max_mob)
 
-def calc_monthly_drop_rate(y, f):
+def calc_monthly_drop_rate(y, f, age_group, mobility):
     """
-    计算每月痰湿积分下降率
+    计算每月痰湿积分下降率（含依从性衰减）
     y: 活动干预强度 (1/2/3)
     f: 每周训练频率 (1-10次)
+    age_group: 年龄组
+    mobility: 活动量表总分
 
     规则：
     - f < 5: 积分基本稳定，下降率为0
-    - f >= 5: 基础下降 3%*(y-1) + 额外下降 1%*(f-5)
+    - f >= 5: 基础下降 3%*(y-1) + 额外下降 1%*(effective_f-5)
+    - 依从性衰减：高龄或低活动能力患者，超出5次/周的部分效果打折
+        * 80-89岁：超出部分仅50%有效
+        * 活动能力<40：超出部分仅60%有效
+        * 60-79岁：超出部分仅80%有效
     """
     if f < 5:
         return 0.0
+    # 依从性衰减 + 疲劳封顶（老年医学安全上限）
+    if age_group == 5:          # 80-89岁：耐受度最低，有效频率封顶6次/周
+        effective_f = min(5 + (f - 5) * 0.5, 6.0)
+    elif mobility < 40:         # 活动能力低下：有效频率封顶6.2次/周
+        effective_f = min(5 + (f - 5) * 0.6, 6.2)
+    elif age_group in [3, 4]:   # 60-79岁：有效频率打8折
+        effective_f = 5 + (f - 5) * 0.8
+    else:                       # 40-59岁且活动能力好：无衰减
+        effective_f = f
     base_drop = 0.03 * (y - 1)
-    extra_drop = 0.01 * (f - 5)
+    extra_drop = 0.01 * (effective_f - 5)
     return base_drop + extra_drop
 
 def optimize_intervention(patient):
@@ -326,7 +402,7 @@ def optimize_intervention(patient):
     # 穷举所有合法组合（最多3×10=30种）
     for y in range(1, y_max + 1):
         for f in range(1, 11):
-            r = calc_monthly_drop_rate(y, f)
+            r = calc_monthly_drop_rate(y, f, patient['age_group'], patient['mobility'])
             # 6个月后痰湿积分（复合下降）
             s_final = s0 * ((1 - r) ** 6)
             # 总成本 = 6个月调理费 + 24周活动费
@@ -362,6 +438,8 @@ print("\n【1】样本ID 1、2、3 的最优干预方案：\n")
 plans_123 = []
 for sid in sample_ids:
     p = df[df['id'] == sid].iloc[0]
+    if p['constitution'] != 5:
+        print(f"  注意：样本ID {sid} 不是痰湿体质（constitution={int(p['constitution'])}），仍按题目要求输出方案。\n")
     plan = optimize_intervention(p)
     plans_123.append(plan)
     lvl_name = ('基础', '中度', '强化')
@@ -430,6 +508,81 @@ phlegm_summary = phlegm_patients.groupby('phlegm_group').agg({
     'opt_s_final': 'mean'
 }).round(2)
 print(phlegm_summary)
+
+# ---------- 自动计算单位成本降分效果 ----------
+# 合并剩余字段
+phlegm_patients['opt_x'] = plan_df['x_level'].values
+phlegm_patients['opt_s_drop'] = plan_df['s_drop'].values
+
+print("\n【3】单位成本降分效果（按调理分级统计实际优化结果）：")
+cost_effect = phlegm_patients.groupby('opt_x').agg({
+    'opt_s_drop': 'mean',
+    'opt_cost': 'mean'
+}).round(2)
+cost_effect['单位成本降分(分/元)'] = (cost_effect['opt_s_drop'] / cost_effect['opt_cost']).round(4)
+cost_effect.index = ['基础(x=1)', '中度(x=2)', '强化(x=3)']
+print(cost_effect)
+
+# ---------- 可视化输出 ----------
+print("\n【4】正在生成可视化图表...")
+os.makedirs('output_figures', exist_ok=True)
+
+# --- 图1: 问题1 相关性热力图 ---
+fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+# 左图: 各指标与痰湿质、高血脂的相关性
+corr_data = pd.DataFrame({
+    '指标': indicators,
+    '与痰湿质Pearson': [corr_phlegm[c] for c in indicators],
+    '与高血脂点二列': [corr_disease[c] for c in indicators]
+})
+corr_melt = corr_data.melt(id_vars='指标', var_name='目标', value_name='r')
+sns.barplot(data=corr_melt, x='指标', y='r', hue='目标', ax=axes[0])
+axes[0].set_title('问题1: 关键指标与目标变量的相关性')
+axes[0].tick_params(axis='x', rotation=45)
+axes[0].axhline(0, color='black', linewidth=0.5)
+# 右图: 九种体质系数
+sns.barplot(data=coef_df.sort_values('abs_coef', ascending=False),
+            x='体质', y='coef', ax=axes[1])
+axes[1].set_title('问题1: 九种体质标准化Logistic系数')
+axes[1].tick_params(axis='x', rotation=45)
+axes[1].axhline(0, color='black', linewidth=0.5)
+plt.tight_layout()
+plt.savefig('output_figures/fig1_problem1_analysis.png', dpi=300)
+plt.close()
+
+# --- 图2: 问题2 ROC曲线 ---
+fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+axes[0].plot(fpr, tpr, label=f'ROC curve (AUC = {np.mean(auc_scores):.3f})')
+axes[0].plot([0, 1], [0, 1], 'k--', label='Random')
+axes[0].set_xlabel('False Positive Rate')
+axes[0].set_ylabel('True Positive Rate')
+axes[0].set_title('问题2: 高风险 vs 非高风险 ROC曲线')
+axes[0].legend()
+# 右图: 风险评分分布
+sns.histplot(data=df, x='risk_score', hue='risk_level', bins=30, kde=True, ax=axes[1])
+axes[1].axvline(low_threshold, color='green', linestyle='--', label=f'低中阈值={low_threshold:.3f}')
+axes[1].axvline(high_threshold, color='red', linestyle='--', label=f'中高阈值={high_threshold:.3f}')
+axes[1].set_title('问题2: 综合风险评分分布')
+axes[1].legend()
+plt.tight_layout()
+plt.savefig('output_figures/fig2_problem2_risk.png', dpi=300)
+plt.close()
+
+# --- 图3: 问题3 最优频率分布 ---
+fig, axes = plt.subplots(1, 2, figsize=(14, 5))
+# 按年龄组的最优频率分布
+sns.boxplot(data=phlegm_patients, x='age_group', y='opt_f', ax=axes[0])
+axes[0].set_title('问题3: 最优训练频率按年龄组分布')
+axes[0].set_xlabel('年龄组')
+# 按活动能力的最优频率分布
+sns.boxplot(data=phlegm_patients, x='mobility_group', y='opt_f', ax=axes[1])
+axes[1].set_title('问题3: 最优训练频率按活动能力分布')
+axes[1].set_xlabel('活动能力分组')
+plt.tight_layout()
+plt.savefig('output_figures/fig3_problem3_optimization.png', dpi=300)
+plt.close()
+
+print("  图表已保存至 output_figures/ 目录")
 
 print("\n" + "=" * 60)
 print("运行完毕")

@@ -1,3 +1,6 @@
 /C题
 *.DS_Store
 /build
+*.claude
+*.vscode
+/output_figures
