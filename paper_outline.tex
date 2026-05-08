@@ -330,11 +330,11 @@ P(\text{高风险}\mid \text{特征组合 } C) = \frac{|\{i: R_i=\text{高}, i\i
 \label{tab:combo}
 \begin{tabular}{clcc}
 \toprule
-\textbf{编号} \& \textbf{特征组合$C$} \& \textbf{高风险概率} \& \textbf{覆盖人数} \\
+\textbf{编号} & \textbf{特征组合$C$} & \textbf{高风险概率} & \textbf{覆盖人数} \\
 \midrule
-1 \& 痰湿积分$\geq 60$ \& 活动总分$<40$ \& 61.54\% \& 26 \\
-2 \& 痰湿积分$\geq 60$ \& BMI$\geq 24$ \& TG$>1.7$ \& 66.67\% \& 18 \\
-3 \& 痰湿质为最高体质 \& 血脂异常$\geq 2$项 \& 53.76\% \& 93 \\
+1 & 痰湿积分$\geq 60$ 且 活动总分$<40$ & 61.54\% & 26 \\
+2 & 痰湿积分$\geq 60$ 且 BMI$\geq 24$ 且 TG$>1.7$ & 66.67\% & 18 \\
+3 & 痰湿质为最高体质 且 血脂异常$\geq 2$项 & 53.76\% & 93 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -394,11 +394,11 @@ LDA模型的三级分类总体准确率为78.3\%，其中高风险类的召回�
 \label{tab:cost}
 \begin{tabular}{cccc}
 \toprule
-\textbf{调理分级$x$} \& \textbf{月成本$C_T(x)$（元/月）} \\u0026 \textbf{活动强度$y$} \& \textbf{单次成本$C_A(y)$（元/次）} \\
+\textbf{调理分级} $x$ & \textbf{月成本} $C_T(x)$（元/月） & \textbf{活动强度} $y$ & \textbf{单次成本} $C_A(y)$（元/次） \\
 \midrule
-1（基础） \& 30 \& 1（轻度） \& 3 \\
-2（中度） \& 80 \& 2（中度） \& 5 \\
-3（强化） \& 130 \& 3（重度） \& 8 \\
+1（基础） & 30 & 1（轻度） & 3 \\
+2（中度） & 80 & 2（中度） & 5 \\
+3（强化） & 130 & 3（重度） & 8 \\
 \bottomrule
 \end{tabular}
 \end{table}
