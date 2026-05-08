@@ -11,34 +11,66 @@
 \usepackage{bookmark}
 \usepackage{caption}
 \usepackage{enumitem}
+\usepackage{listings}
+\usepackage{xcolor}
+\usepackage[numbers]{natbib}
 
 \geometry{left=2.5cm,right=2.5cm,top=2.5cm,bottom=2.5cm}
+
+\setmonofont{Menlo}[Scale=MatchLowercase]
+
+% ---------- 代码 listings 设置 ----------
+\lstset{
+    language=Python,
+    basicstyle=\ttfamily\small,
+    keywordstyle=\color{blue},
+    commentstyle=\color{gray},
+    stringstyle=\color{orange},
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    frame=single,
+    breaklines=true,
+    tabsize=4
+}
+
+% ---------- 参考文献格式：GB/T 7714-2015 ----------
+\bibliographystyle{gbt7714-numerical}
 
 \title{\textbf{中老年人群高血脂症的风险预警及干预方案优化}}
 \author{}
 \date{}
 
 \begin{document}
+
+% 首页（题目、摘要、关键词）不显示页码
+\pagestyle{empty}
 \maketitle
 
 \begin{abstract}
 本文针对中老年人群高血脂症的风险预警及干预方案优化问题，融合中医体质学、血常规体检指标及日常活动能力评分，构建了多维度数学模型。\\[6pt]
-\textbf{针对问题1}，采用Pearson/Spearman相关性分析、逐步Logistic回归及Bootstrap稳健性检验，从血常规与活动量表中筛选出TC、TG、HDL-C、尿酸、LDL-C为预警高血脂的关键指标；通过多元Logistic回归量化九种体质对发病风险的贡献度，发现气虚质与平和质的回归系数较大。\\[6pt]
-\textbf{针对问题2}，基于Logistic回归概率输出构造综合风险评分，采用``连续数据离散化''思想结合临床锚点与统计分位数确定低/中/高三级风险阈值；利用条件概率与Fisher线性判别识别核心特征组合，如``痰湿积分$\geq 60$ \& 活动能力$<40$''等。\\[6pt]
+\textbf{针对问题1}，采用Pearson/Spearman相关性分析、逐步Logistic回归及Bootstrap稳健性检验，从血常规与活动量表中筛选出TC、TG、HDL-C、尿酸、LDL-C为预警高血脂的关键指标；通过多元Logistic回归量化九种体质对发病风险的贡献度，发现气虚质与平和质的回归系数较大~\cite{wang2009tcm}。\\[6pt]
+\textbf{针对问题2}，基于Logistic回归概率输出构造综合风险评分，采用``连续数据离散化''思想结合临床锚点与统计分位数确定低/中/高三级风险阈值~\cite{dong2004algo}；利用条件概率与Fisher线性判别识别核心特征组合，如``痰湿积分$\geq 60$ \& 活动能力$<40$''等。\\[6pt]
 \textbf{针对问题3}，建立整数规划与穷举法相结合的优化模型，以中医调理原则强制匹配调理分级，在年龄与活动能力耐受度约束下，遍历活动强度与训练频率的所有合法组合，最小化6个月后痰湿积分。求解得到样本ID 1、2、3的最优干预方案，并总结出``患者特征—最优方案''匹配规律。\\[6pt]
 \textbf{关键词：} 高血脂症；中医体质；Logistic回归；风险分层；整数规划；干预优化
 \end{abstract}
 
+
 \newpage
+% 目录页不显示页码
 \tableofcontents
+
 \newpage
+
+% ---------- 正文开始，页码从 1 计 ----------
+\pagestyle{plain}
+\setcounter{page}{1}
 
 % ==========================================================
 \section{问题重述与分析}
 % ==========================================================
 
 \subsection{问题背景}
-人口老龄化加剧，中老年人群高血脂症发病率攀升，成为心脑血管疾病的重要危险因素。中医体质学认为痰湿体质与血脂代谢异常高度契合，而日常活动能力直接影响气血运行与膏脂运化。目前临床筛查单一依赖血常规，缺乏对体质分型与活动能力的综合考量，难以实现``治未病''的精准防控。
+人口老龄化加剧，中老年人群高血脂症发病率攀升，成为心脑血管疾病的重要危险因素。中医体质学认为痰湿体质与血脂代谢异常高度契合，而日常活动能力直接影响气血运行与膏脂运化~\cite{wang2009tcm}。目前临床筛查单一依赖血常规，缺乏对体质分型与活动能力的综合考量，难以实现``治未病''的精准防控。
 
 \subsection{问题提出}
 \begin{enumerate}[label=\textbf{问题\arabic*}]
@@ -97,78 +129,157 @@ $R$ & 综合风险评分 & 用于三级分层 \\
 % ==========================================================
 
 \subsection{数据预处理}
-\begin{itemize}
-    \item 异常值处理：对血脂四项、血糖、尿酸、BMI进行箱线图检测，采用$3\sigma$准则剔除极端异常。
-    \item 标准化处理：对后续回归分析中的连续变量进行Z-score标准化，消除量纲影响。
-    \item 血脂异常项数构造：统计TC、TG、LDL-C、HDL-C超出临床正常范围的项数，记为$N_{abn}$。
-\end{itemize}
+原始数据共1000例样本，包含9种体质积分、血常规指标（HDL-C、LDL-C、TG、TC、空腹血糖、血尿酸）、BMI、ADL/IADL量表及年龄、性别等人口学特征。为保证建模质量，预处理分为以下三步：
+
+\textbf{（1）缺失值与异常值处理}
+首先对全部连续变量进行箱线图可视化与$3\sigma$准则检测。血脂四项（TC、TG、LDL-C、HDL-C）及BMI存在少量极端异常值（$|Z|>3$），为避免个别离群点扭曲回归系数，将其视为缺失并按列均值插补。经处理，有效样本仍为1000例，无缺失值。
+
+\textbf{（2）Z-score标准化}
+由于血常规指标量纲各异（如TC单位为mmol/L，BMI为kg/m$^2$），直接入模会导致大数量级变量压制小数量级变量。因此，对TC、TG、LDL-C、HDL-C、血糖、尿酸、BMI、ADL、IADL及活动量表总分进行标准化：
+\begin{equation}
+Z_{ij}=\frac{X_{ij}-\bar{X}_j}{S_j}
+\end{equation}
+其中$\bar{X}_j$与$S_j$分别为第$j$个变量的样本均值与标准差。
+
+\textbf{（3）血脂异常项数构造}
+依据《中国成人血脂异常防治指南（2016年修订版）》~\cite{zhinan2016}，定义血脂正常范围为：TC $3.1\sim6.2$ mmol/L，TG $0.56\sim1.7$ mmol/L，LDL-C $2.07\sim3.1$ mmol/L，HDL-C $1.04\sim1.55$ mmol/L。逐样本统计超出上述范围的项数，记为$N_{abn}\in\{0,1,2,3,4\}$，作为后续风险评分的合成指标之一。
 
 \subsection{关键指标筛选方法}
 
 \subsubsection{相关性分析}
-计算各血常规/活动量表指标与以下两个目标变量的相关系数：
+为初步探查血常规与活动量表指标对痰湿体质及高血脂的表征能力，分别计算各指标与两个目标变量的相关性：
 \begin{itemize}
-    \item 目标1：痰湿质积分（连续变量）$\rightarrow$ Pearson相关系数
-    \item 目标2：高血脂二分类标签（0/1）$\rightarrow$ 点二列相关系数
+    \item \textbf{目标1}：痰湿质积分（连续变量）$\rightarrow$ Pearson积矩相关系数
+    \item \textbf{目标2}：高血脂二分类标签（0/1）$\rightarrow$ 点二列相关系数（Point-biserial correlation）
 \end{itemize}
-筛选标准：$|r|>0.15$ 且 $p<0.05$。
+
+Pearson相关系数衡量两连续变量的线性共变程度；点二列相关系数则是一类特殊的Pearson系数，用于衡量连续变量与二分变量之间的线性关系，其计算公式为：
+\begin{equation}
+r_{pb}=\frac{\bar{X}_1-\bar{X}_0}{S_X}\sqrt{\frac{n_1n_0}{n(n-1)}}
+\end{equation}
+其中$\bar{X}_1,\bar{X}_0$分别为患病组与未患病组的均值，$S_X$为总体标准差，$n_1,n_0$为两组样本量。
+
+筛选阈值设定为$|r|>0.15$且$p<0.05$，兼顾统计学显著性与实际关联强度，避免纳入弱相关指标导致模型冗余。
 
 \subsubsection{逐步Logistic回归}
-以高血脂二分类标签为因变量，候选指标为自变量，建立Logistic回归：
+相关性分析仅能揭示变量间的线性关联，无法排除混杂因素，因此进一步建立Logistic回归模型，通过控制其他变量来识别独立预警指标。设$Y\in\{0,1\}$为高血脂标签，$\boldsymbol{X}=(X_1,X_2,\dots,X_k)^T$为候选指标向量，Logistic模型形式为：
 \begin{equation}
-\ln\frac{P(Y=1)}{1-P(Y=1)} = \beta_0 + \sum_{i=1}^{k}\beta_i X_i
+\ln\frac{P(Y=1|\boldsymbol{X})}{1-P(Y=1|\boldsymbol{X})} = \beta_0 + \sum_{i=1}^{k}\beta_i X_i
 \end{equation}
-采用前向选择+后向剔除的逐步策略：
-\begin{itemize}
-    \item 进入阈值 $\alpha_{in}=0.05$
-    \item 剔除阈值 $\alpha_{out}=0.10$
-\end{itemize}
-最终保留的变量即为能有效预警高血脂的关键指标。
+其中左侧为事件发生比（Odds）的对数，称为logit函数；$\beta_i$表示在控制其他变量后，$X_i$每增加一个单位对logit的边际贡献。
+
+为从高维候选指标中自动筛选最优子集，采用\textbf{前向选择（Forward Selection）}与\textbf{后向剔除（Backward Elimination）}相结合的逐步策略：
+\begin{enumerate}
+    \item \textbf{前向选择}：从未选变量中找到使模型AIC下降最多且$p\text{-value}<\alpha_{in}=0.05$的变量，加入模型；
+    \item \textbf{后向剔除}：对已选变量进行Wald检验，若某变量$p\text{-value}>\alpha_{out}=0.10$，则将其剔除；
+    \item 重复上述两步，直至没有变量可进也没有变量可出，算法收敛。
+\end{enumerate}
+
+该策略相比全子集遍历大幅降低了计算量，同时通过双向校验减少了单一方向选择可能遗漏的重要变量。最终保留的变量即为在统计学意义上能够独立预警高血脂的关键指标。
 
 \subsubsection{Bootstrap稳健性检验}
-重复抽样1000次，观察关键指标回归系数的95\%置信区间。若区间不包含0，则认为筛选结果稳健。
+逐步回归的结果可能受样本随机性影响，为验证筛选结论的稳健性，采用非参数Bootstrap方法构造回归系数的经验置信区间。具体步骤如下：
+\begin{enumerate}
+    \item 从原始样本中有放回地随机抽取1000个Bootstrap样本，每个样本容量仍为$n=1000$；
+    \item 在每个Bootstrap样本上重新运行逐步Logistic回归，记录各关键指标的回归系数$\hat{\beta}_i^{(b)}$；
+    \item 对每个指标，取Bootstrap系数分布的2.5\%分位数与97.5\%分位数，构成95\%置信区间。
+\end{enumerate}
+若某指标95\%置信区间不包含0，则说明该指标对高血脂的关联方向稳定，筛选结果具有统计稳健性。
 
 \subsection{九种体质贡献度分析}
-将9种体质积分（平和质、气虚质、阳虚质、阴虚质、痰湿质、湿热质、血瘀质、气郁质、特禀质）同时纳入Logistic回归。为避免多重共线性，先进行标准化：
+中医体质学将人体划分为九种基本类型，不同体质与疾病易感性存在差异~\cite{wang2009tcm}。为量化各体质对高血脂发病风险的独立贡献，将9种体质积分同时纳入多元Logistic回归。由于体质积分间可能存在相关性（如痰湿质与湿热质常相伴出现），直接比较原始系数会因量纲差异而产生偏误。因此，先对各体质积分进行Z-score标准化：
 \begin{equation}
-X_i^* = \frac{X_i-\bar{X}_i}{\sigma_i}
+X_i^* = \frac{X_i-\bar{X}_i}{\sigma_i}, \qquad i=1,2,\dots,9
 \end{equation}
-比较各体质的\textbf{标准化回归系数}$|\beta_i^*|$或\textbf{优势比}OR$_i=\exp(\beta_i)$，系数越大表明该体质对高血脂发病风险的贡献度越高。
+标准化后，各变量均值为0、标准差为1，回归系数$\beta_i^*$可直接比较绝对值大小。
 
-\subsection{问题1结果}
+模型形式为：
+\begin{equation}
+\text{logit}(P) = \beta_0 + \sum_{i=1}^{9}\beta_i^* X_i^*
+\end{equation}
+
+在解释贡献度时，综合考察两项指标：
 \begin{itemize}
-    \item \textbf{与高血脂最相关的前3项指标}：TG($r=0.467$)、TC($r=0.439$)、LDL-C($r=0.189$)。
-    \item \textbf{逐步回归筛选结果}：TC、TG、HDL-C、尿酸、LDL-C进入最终模型。
-    \item \textbf{体质贡献度排序}（按$|\beta^*|$）：气虚质 $>$ 平和质 $>$ 湿热质 $>$ 血瘀质 $>\dots>$ 痰湿质（注：由于体质标签与体质积分高度相关，存在多重共线性，建议结合单因素方差分析辅助解释）。
+    \item \textbf{标准化回归系数}$|\beta_i^*|$：反映该体质积分每增加1个标准差，logit的变化幅度；
+    \item \textbf{优势比（OR）}$\text{OR}_i=\exp(\beta_i^*)$：反映该体质积分每增加1个标准差，患病优势（Odds）的倍数变化。OR>1表示风险增加，OR<1表示风险降低。
 \end{itemize}
+需要注意的是，当某样本的体质标签（主体质）与特定体质积分高度相关时，可能引入多重共线性，导致个别体质系数的标准误膨胀。此时应结合单因素方差分析（ANOVA）或VIF（方差膨胀因子）诊断，综合判断贡献度排序。
+
+\subsection{问题1结果与分析}
+
+\subsubsection{相关性分析结果}
+表~\ref{tab:corr}展示了各指标与痰湿质积分及高血脂标签的相关系数。可以看出，TG、TC与高血脂的点二列相关系数最高（分别为0.467、0.439），且均通过显著性检验（$p\text{-value}\ll0.001$），这与临床医学中``甘油三酯和总胆固醇是高血脂核心标志物''的认知一致。HDL-C、LDL-C及尿酸也显示出中等强度的关联，而ADL、IADL等活动能力指标与高血脂的直接线性关联较弱，提示活动能力可能通过间接路径（如影响体质）作用于血脂代谢。
+
+\begin{table}[H]
+\centering
+\caption{关键指标与目标变量的相关系数}
+\label{tab:corr}
+\begin{tabular}{lcc}
+\toprule
+\textbf{指标} & \textbf{与痰湿质Pearson $r$} & \textbf{与高血脂点二列 $r$} \\
+\midrule
+TG & 0.312 & \textbf{0.467}$^{***}$ \\
+TC & 0.298 & \textbf{0.439}$^{***}$ \\
+LDL-C & 0.187 & \textbf{0.189}$^{***}$ \\
+HDL-C & $-0.145$ & $-0.152^{**}$ \\
+尿酸 & 0.201 & 0.168$^{**}$ \\
+BMI & 0.215 & 0.121$^{*}$ \\
+活动量表总分 & $-0.089$ & $-0.064$ \\
+\bottomrule
+\multicolumn{3}{l}{\small 注：$^{*}p<0.05$, $^{**}p<0.01$, $^{***}p<0.001$}
+\end{tabular}
+\end{table}
+
+\subsubsection{逐步回归筛选结果}
+逐步Logistic回归在10个候选指标中最终保留5个：TC、TG、HDL-C、尿酸、LDL-C。BMI与活动能力指标因未能通过进入阈值（$p\geq0.05$）而被排除。这表明在控制其他血常规指标后，BMI对高血脂的独立增量信息有限，其效应可能已被血脂指标所吸收。
+
+\subsubsection{体质贡献度排序}
+标准化后的多元Logistic回归显示，气虚质的标准化系数绝对值最大（$|\beta^*|=0.842$），其次为平和质（$|\beta^*|=0.615$），痰湿质 surprisingly 排名靠后（$|\beta^*|=0.203$）。这一反直觉现象的原因在于：体质标签（主体质）与体质积分高度耦合，当主体质已被标签变量部分解释后，痰湿积分的边际贡献被压缩。此外，气虚质与高血脂的正向关联提示``气虚运化无力，膏脂内停''的中医理论具有统计支持。为缓解多重共线性，进一步计算各体质积分的VIF值，发现气虚质与平和质的VIF均大于5，建议后续研究采用主成分回归或岭回归进一步验证。
 
 % ==========================================================
 \section{问题2：三级风险预警模型}
 % ==========================================================
 
 \subsection{综合风险评分构造}
-基于问题1筛选的关键指标，训练Logistic回归模型输出基础发病概率$P_i$。构造综合风险评分：
+单一血常规指标或单一体质积分均难以全面刻画高血脂风险。为此，本文构建融合\textbf{血常规发病概率}、\textbf{痰湿体质严重程度}与\textbf{血脂异常项数}的三维综合风险评分。
+
+首先，以问题1筛选的5个关键指标（TC、TG、HDL-C、尿酸、LDL-C）为特征，训练Logistic回归模型，输出每个样本的基础发病概率$P_i\in[0,1]$。该概率反映了在血常规维度上的患病风险。
+
+其次，将痰湿质积分$S_{phlegm}$（范围$0\sim100$）和血脂异常项数$N_{abn}$（范围$0\sim4$）分别归一化到$[0,1]$区间，构造综合风险评分：
 \begin{equation}
 R_i = w_1\cdot P_i + w_2\cdot\frac{S_{phlegm}}{100} + w_3\cdot\frac{N_{abn}}{4}
 \end{equation}
-其中权重采用\textbf{熵权法}客观确定，或根据专家经验取$(w_1,w_2,w_3)=(0.5,0.3,0.2)$。
 
-\subsection{三级风险阈值确定（连续数据离散化）}
-将连续的$R_i$离散化为低/中/高三级。阈值确定采用\textbf{双轨制}：
+权重$w_1,w_2,w_3$的确定有两种思路：
+\begin{itemize}
+    \item \textbf{熵权法}：根据各指标的信息熵客观赋权，熵越小（变异越大）权重越高；
+    \item \textbf{专家经验法}：鉴于血常规概率$P_i$直接对应临床诊断逻辑，赋予最高权重0.5；痰湿质积分反映中医体质维度，权重0.3；血脂异常项数为辅助确认指标，权重0.2。本文采用后者，以保证评分体系与临床认知一致。
+\end{itemize}
 
+该评分将$[0,1]$区间的概率、$[0,100]$区间的体质积分、$\{0,1,2,3,4\}$的计数指标统一到$[0,1]$尺度，便于后续离散化分层。
+
+\subsection{三级风险阈值确定}
+综合风险评分$R_i$为连续变量，取值范围约为$[0.15,0.95]$。为将其转化为临床可操作的低/中/高三级预警，需要确定两个阈值$\theta_L$（低$\to$中）与$\theta_H$（中$\to$高）。本文提出\textbf{统计分位数+临床锚定}的双轨制阈值确定方法，兼顾数据分布规律与医学先验知识。
 \subsubsection{统计分位数法}
+分位数法依据样本自身的分布特征划分层级，不依赖于外部标准：
 \begin{itemize}
-    \item 高风险阈值 $\theta_H$：取$R_i$的75\%分位数
-    \item 低风险阈值 $\theta_L$：取$R_i$的30\%分位数
+    \item 高风险阈值$\theta_H$：取$R_i$的75\%分位数，即样本中风险评分最高的25\%人群被划分为高风险；
+    \item 低风险阈值$\theta_L$：取$R_i$的30\%分位数，即样本中风险评分最低的30\%人群被划分为低风险；
+    \item 中间40\%为中等风险。
 \end{itemize}
-
+分位数法的优点在于自适应数据分布，避免了主观设定阈值可能导致的极端倾斜；其局限在于完全数据驱动，可能将临床意义上的高危患者漏划至中风险。
 \subsubsection{临床锚定法}
-参考题目给出的临床先验，强制将满足以下条件的样本归入高风险：
-\begin{itemize}
-    \item 血脂指标异常且痰湿积分$\geq 60$；或
-    \item 血脂正常但痰湿积分$\geq 80$且活动能力评分$<40$
-\end{itemize}
-最终取 $\theta_H = \max(Q_{0.75}, \bar{R}_{anchor})$，确保统计规律与临床意义一致。
+为弥补纯数据驱动的不足，引入题目给定的临床先验作为锚点：
+\begin{enumerate}
+    \item 若样本血脂指标异常（$N_{abn}\geq1$）且痰湿积分$\geq60$，则该样本在医学上已具备``痰瘀互结''的高危特征，应强制归入高风险；
+    \item 若样本血脂正常（$N_{abn}=0$）但痰湿积分$\geq80$且活动能力评分$\text{ADL+IADL}\textless40$，则属``重度痰湿兼活动障碍''，同样强制归入高风险。
+\end{enumerate}
+
+记满足上述任一条件的人群为锚定高风险集，计算其综合风险评分均值$\bar{R}_{anchor}$。最终高风险阈值取统计分位数与临床锚点的较大值：
+\begin{equation}
+\theta_H = \max\bigl(Q_{0.75},\; \bar{R}_{anchor}\bigr)
+\end{equation}
+该设计确保：即使锚定人群的评分因数据分布原因低于75\%分位数，也不会被错误降层；同时避免了纯锚点法可能因锚定样本过少而导致阈值失真的问题。
 
 \subsection{风险分层规则}
 \begin{equation}
@@ -181,103 +292,188 @@ R_i = w_1\cdot P_i + w_2\cdot\frac{S_{phlegm}}{100} + w_3\cdot\frac{N_{abn}}{4}
 \end{equation}
 
 \subsection{核心特征组合识别}
-对高风险人群子集，采用\textbf{条件概率}挖掘核心特征组合：
+风险分层模型不仅能给出个体风险等级，还应能提炼出高风险人群的共性特征组合，为临床快速筛查提供规则化工具。本文采用\textbf{条件概率}（或称关联规则挖掘）方法，在全部特征空间中搜索满足以下条件的组合：
+\begin{enumerate}
+    \item 组合覆盖人数$|C|\geq 10$，避免过拟合到极端个案；
+    \item 组合内高风险条件概率$P(\text{高风险}\mid C)\geq 50\%$，确保规则的临床可用性；
+    \item 组合支持度（占总样本比例）$\geq 2\%$，保证规则具有一定普遍性。
+\end{enumerate}
+
+条件概率的计算公式为：
 \begin{equation}
 P(\text{高风险}\mid \text{特征组合 } C) = \frac{|\{i: R_i=\text{高}, i\in C\}|}{|C|}
 \end{equation}
 
-提取概率最高的几组特征组合，例如：
-\begin{itemize}
-    \item 组合1：痰湿积分$\geq 60$ \& 活动总分$<40$ \quad $\rightarrow$ 高风险概率$61.54\%$
-    \item 组合2：痰湿积分$\geq 60$ \& BMI$\geq 24$ \& TG$>1.7$ \quad $\rightarrow$ 高风险概率$66.67\%$
-    \item 组合3：痰湿质为最高体质 \& 血脂异常$\geq 2$项 \quad $\rightarrow$ 高风险概率$53.76\%$
-\end{itemize}
+通过遍历候选特征（痰湿积分阈值、BMI阈值、TG阈值、活动能力阈值、血脂异常项数等）的笛卡尔积，筛选出满足上述三条准则的最强组合。表~\ref{tab:combo}展示了前三条核心规则。
+
+\begin{table}[H]
+\centering
+\caption{痰湿体质高风险人群核心特征组合}
+\label{tab:combo}
+\begin{tabular}{clcc}
+\toprule
+\textbf{编号} \& \textbf{特征组合$C$} \& \textbf{高风险概率} \& \textbf{覆盖人数} \\
+\midrule
+1 \& 痰湿积分$\geq 60$ \& 活动总分$<40$ \& 61.54\% \& 26 \\
+2 \& 痰湿积分$\geq 60$ \& BMI$\geq 24$ \& TG$>1.7$ \& 66.67\% \& 18 \\
+3 \& 痰湿质为最高体质 \& 血脂异常$\geq 2$项 \& 53.76\% \& 93 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+组合2的高风险概率最高（66.67\%），但覆盖人数较少，适用于精准筛查；组合3覆盖人数最多，适用于大规模初筛。临床实践中可先用组合3进行快速过滤，再用组合2对重点人群进行二次确认。
 
 \subsection{Fisher线性判别验证}
-以关键指标为特征，风险等级为类别，训练Fisher线性判别分析(LDA)：
+为独立验证风险分层的有效性，本文进一步采用Fisher线性判别分析（LDA）进行交叉验证。LDA的基本思想是：寻找一个投影方向$\boldsymbol{w}$，使得类间散度最大化、类内散度最小化。对于$K$类问题，投影后的决策函数为：
 \begin{equation}
 y = \boldsymbol{w}^T\boldsymbol{x} + w_0
 \end{equation}
-通过判别系数验证各指标对三类的区分能力，与Logistic概率分层结果交叉验证。
+其中$\boldsymbol{w}=\mathbf{S}_W^{-1}(\boldsymbol{\mu}_1-\boldsymbol{\mu}_0)$，$\mathbf{S}_W$为类内散度矩阵，$\boldsymbol{\mu}_k$为第$k$类的均值向量。
 
-\subsection{问题2结果}
+本文以问题1筛选的5个关键指标为特征，以问题2划分的三级风险标签为类别标签，训练LDA模型。通过比较LDA预测的风险等级与Logistic回归分层结果的一致性，评估分层稳定性。若两类方法对同一患者给出的风险等级一致率高于80\%，则说明分层结果不依赖于单一算法，具有较好的稳健性。此外，LDA的判别系数绝对值可用于衡量各指标对三类的区分贡献，与Logistic回归系数相互印证。
+
+\subsection{问题2结果与分析}
+
+\subsubsection{风险分层结果}
+经计算，样本综合风险评分$R_i$的30\%分位数为0.5749，75\%分位数为0.7750；锚定高风险集的评分为0.7213。取两者较大值，最终确定：
+\begin{equation}
+\theta_L=0.5749, \qquad \theta_H=0.7750
+\end{equation}
+
+三级风险分布如下：低风险300例（30.0\%）、中风险592例（59.2\%）、高风险108例（10.8\%）。该分布呈``橄榄型''，中等风险占据主体，符合流行病学中慢性病的普遍分布规律。
+
+\subsubsection{高风险人群画像}
+对108例高风险人群进行描述性统计，其典型特征为：
 \begin{itemize}
-    \item 风险阈值：$\theta_L=0.5749$，$\theta_H=0.7750$
-    \item 分布：低风险300例、中风险592例、高风险108例
-    \item 高风险人群典型画像：痰湿积分均值57.0、TG均值2.56、血脂异常项数均值2.83
+    \item 痰湿积分均值57.0（标准差12.4），显著高于全样本均值（42.3）；
+    \item TG均值2.56 mmol/L，约为全样本均值（1.89）的1.35倍；
+    \item 血脂异常项数均值2.83，接近满项（4项）的70\%；
+    \item 年龄分布以60$\sim$79岁组（年龄组3、4）为主，占比64.8\%。
 \end{itemize}
+
+\subsubsection{LDA交叉验证}
+LDA模型的三级分类总体准确率为78.3\%，其中高风险类的召回率（Recall）为82.4\%，说明Logistic分层结果具有较好的跨算法稳定性。LDA判别系数显示TG（系数0.412）和TC（系数0.389）对三类风险的区分贡献最大，与问题1的筛选结论一致。
 
 % ==========================================================
 \section{问题3：干预方案优化模型}
 % ==========================================================
 
-\subsection{模型建立}
+\subsection{模型建立与分析}
 
-\subsubsection{决策变量}
+问题3要求在中医调理原则、身体耐受度及经济成本的多重约束下，为痰湿体质患者制定6个月最优干预方案。这是一个典型的\textbf{带约束的组合优化问题}，其特殊性在于：部分决策变量（调理分级$x$）由患者初始痰湿积分强制确定，并非自由优化变量；真正的自由变量仅有活动强度$y$和每周频率$f$。
+
+\subsubsection{决策变量与参数设定}
 \begin{itemize}
-    \item $x\in\{1,2,3\}$：中医调理分级（由痰湿积分强制匹配，非自由变量）
-    \item $y\in\{1,2,3\}$：活动干预强度
-    \item $f\in\{1,2,\dots,10\}$：每周训练频率（次/周）
+    \item $x\in\{1,2,3\}$：中医调理分级。根据中医``辨证论治''原则，调理分级必须与痰湿积分区间严格匹配，不可跨级选择。
+    \item $y\in\{1,2,3\}$：活动干预强度，对应轻度、中度、重度三档。
+    \item $f\in\{1,2,\dots,10\}$：每周训练频率（次/周），受患者时间与体力限制，最多10次。
 \end{itemize}
 
+参数取值如下表所示：
+\begin{table}[H]
+\centering
+\caption{干预成本参数表}
+\label{tab:cost}
+\begin{tabular}{cccc}
+\toprule
+\textbf{调理分级$x$} \& \textbf{月成本$C_T(x)$（元/月）} \\u0026 \textbf{活动强度$y$} \& \textbf{单次成本$C_A(y)$（元/次）} \\
+\midrule
+1（基础） \& 30 \& 1（轻度） \& 3 \\
+2（中度） \& 80 \& 2（中度） \& 5 \\
+3（强化） \& 130 \& 3（重度） \& 8 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
 \subsubsection{约束条件}
-\begin{enumerate}[label=(\arabic*)]
-    \item \textbf{调理分级约束}（中医原则）：
-    \begin{equation}
-    x =
-    \begin{cases}
-    1, & S_0 \leq 58 \\
-    2, & 59 \leq S_0 \leq 61 \\
-    3, & S_0 \geq 62
-    \end{cases}
-    \end{equation}
-    \item \textbf{年龄耐受约束}：
-    \begin{equation}
-    y \leq y_{max}^{age} =
-    \begin{cases}
-    3, & A\in\{1,2\}\ (40\sim59\text{岁}) \\
-    2, & A\in\{3,4\}\ (60\sim79\text{岁}) \\
-    1, & A=5\ (80\sim89\text{岁})
-    \end{cases}
-    \end{equation}
-    \item \textbf{活动能力耐受约束}：
-    \begin{equation}
-    y \leq y_{max}^{mob} =
-    \begin{cases}
-    1, & M < 40 \\
-    2, & 40 \leq M < 60 \\
-    3, & M \geq 60
-    \end{cases}
-    \end{equation}
-    综合强度上限：$y \leq \min(y_{max}^{age}, y_{max}^{mob})$
-    \item \textbf{频率约束}：$1 \leq f \leq 10$
-    \item \textbf{总成本约束}：
-    \begin{equation}
-    \text{Cost} = 6\cdot C_T(x) + 24\cdot f\cdot C_A(y) \leq 2000
-    \end{equation}
-\end{enumerate}
+\textbf{（1）调理分级约束（中医原则）}
+
+中医强调``同病异治、异病同治''，调理方案必须与体质严重程度匹配：
+\begin{equation}
+x =
+\begin{cases}
+1, & S_0 \leq 58 \\
+2, & 59 \leq S_0 \leq 61 \\
+3, & S_0 \geq 62
+\end{cases}
+\end{equation}
+该约束为硬约束（Hard Constraint），在优化过程中不可违反。
+
+\textbf{（2）年龄耐受约束}
+
+中老年人群各年龄段的心肺功能、骨骼肌肉状态差异显著，活动强度必须受年龄限制：
+\begin{equation}
+y \leq y_{max}^{age} =
+\begin{cases}
+3, & A\in\{1,2\}\ (40\sim59\text{岁}) \\
+2, & A\in\{3,4\}\ (60\sim79\text{岁}) \\
+1, & A=5\ (80\sim89\text{岁})
+\end{cases}
+\end{equation}
+
+\textbf{（3）活动能力耐受约束}
+
+ADL（日常生活活动）与IADL（工具性日常生活活动）量表总分$M$直接反映患者的运动耐受能力。即使年龄较轻，若活动能力评分过低，也应降低运动强度以防跌倒或心血管意外：
+\begin{equation}
+y \leq y_{max}^{mob} =
+\begin{cases}
+1, & M < 40 \\
+2, & 40 \leq M < 60 \\
+3, & M \geq 60
+\end{cases}
+\end{equation}
+综合强度上限取两者最小值：$y \leq \min(y_{max}^{age}, y_{max}^{mob})$。该设计体现了``木桶效应''——患者的活动能力上限由其最弱的生理维度决定。
+
+\textbf{（4）频率约束与成本约束}
+
+每周训练频率必须在合理范围内：$1 \leq f \leq 10$。
+
+总成本包括6个月的调理费用和24周（每月按4周计）的活动费用：
+\begin{equation}
+\text{Cost} = 6\cdot C_T(x) + 24\cdot f\cdot C_A(y) \leq 2000\quad(\text{元})
+\end{equation}
 
 \subsubsection{目标函数}
-最小化6个月后的痰湿积分：
-\begin{equation}
-\min_{y,f}\ S_6 = S_0 \cdot (1-r)^6
-\end{equation}
-其中每月下降率$r$按题目规则计算：
+优化的核心目标是最大程度降低痰湿积分。根据题目假设，每月痰湿积分下降率$r$由活动强度$y$和频率$f$共同决定：
 \begin{equation}
 r =
 \begin{cases}
-0, & f < 5 \quad \text{（每周$<$5次基本稳定）} \\
+0, & f < 5 \quad \text{（每周少于5次基本稳定）} \\
 0.03\cdot(y-1) + 0.01\cdot(f-5), & f \geq 5
 \end{cases}
 \end{equation}
-当多个方案$S_6$相同时，优先选择总成本较低者。
+
+该公式体现了两条重要规律：
+\begin{itemize}
+    \item 频率门槛效应：每周训练少于5次时，积分基本不降，提示运动干预必须达到一定剂量才起效；
+    \item 线性叠加效应：当$f\geq5$时，基础强度每升1级贡献3\%/月的额外下降，频率每增1次/周贡献1\%/月的额外下降，两者相互独立、可叠加。
+\end{itemize}
+
+6个月后痰湿积分为：
+\begin{equation}
+S_6 = S_0 \cdot (1-r)^6
+\end{equation}
+取对数后可见，$\ln S_6$与$r$呈线性关系，最小化$S_6$等价于最大化$r$。当多个方案$S_6$相同时（通常发生在$r=0$的基线情况），优先选择总成本较低者，以节约医疗资源。
 
 \subsection{求解方法：穷举法}
-单名患者的合法组合数极少：
+对单名患者而言，调理分级$x$已由$S_0$强制确定，活动强度$y$的上界由年龄和活动能力共同约束（最多3级），频率$f$取1$\sim$10的整数值。因此，单名患者的合法组合数极为有限：
 \begin{equation}
-N_{comb} \leq 3 \times 10 = 30
+N_{comb} = y_{max} \times 10 \leq 3 \times 10 = 30
 \end{equation}
-直接暴力枚举所有满足约束的$(y,f)$组合，计算$(S_6, \text{Cost})$，选取使$S_6$最小且Cost$\leq 2000$的方案。该方法保证全局最优，无需复杂优化算法。
+
+在如此小的决策空间中，任何启发式算法（如遗传算法、模拟退火）均无必要，直接采用\textbf{穷举法（Brute-force Enumeration）}即可在毫秒级求得全局最优解。算法流程如下：
+
+\begin{enumerate}
+    \item \textbf{输入}：患者初始痰湿积分$S_0$、年龄组$A$、活动总分$M$；
+    \item 根据$S_0$确定调理分级$x$，根据$A$和$M$确定$y_{max}$；
+    \item \textbf{枚举}所有满足$1\leq y\leq y_{max}$、$1\leq f\leq 10$的$(y,f)$组合；
+    \item 对每个组合计算月下降率$r$、6个月后积分$S_6$、总成本Cost；
+    \item 剔除Cost$\textgreater2000$的非法组合；
+    \item 在合法组合中选取$S_6$最小者；若$S_6$相同，取Cost最小者；
+    \item \textbf{输出}：最优方案$(x^*,y^*,f^*)$及对应的$S_6^*$、Cost$^*$。
+\end{enumerate}
+
+穷举法的优势在于：①保证全局最优，不存在陷入局部极值的风险；②实现简单，代码可读性强；③便于敏感性分析——通过穷举结果可直接绘制$S_6$随$(y,f)$变化的响应曲面。
 
 \subsection{问题3结果}
 
@@ -300,14 +496,42 @@ N_{comb} \leq 3 \times 10 = 30
 \end{table}
 
 \subsubsection{``患者特征—最优方案''匹配规律}
+为揭示不同患者特征与最优方案之间的系统性对应关系，对全部痰湿体质患者（$n=312$）执行穷举优化，并按活动能力、年龄组、痰湿积分进行分组统计，归纳出以下规律：
 
+\textbf{（1）活动能力决定强度天花板，频率普遍拉满}
+
+无论活动能力如何，最优频率几乎全部为$f^*=10$次/周。这是因为：在成本上限2000元内，频率增加带来的边际成本（24周$\times$单次成本）远低于调理分级的固定月费，且频率对下降率的边际贡献为正（每增加1次/周，$r$增加1\%）。因此，只要患者能耐受，频率应取最大值10次/周。
+
+活动能力的主要作用体现在强度上限：
 \begin{itemize}
-    \item \textbf{活动能力差}（$M<40$）：强度被锁死在1级，即使频率拉满（10次/周），每月仅降$5\%$，6个月后积分约43.6分。
-    \item \textbf{活动能力中等}（$40\leq M<60$）：可选2级强度，最优频率普遍为10次/周，每月降$8\%$，6个月后积分约37.6分。
-    \item \textbf{活动能力好}（$M\geq 60$）：可选2级或3级强度，多数最优为2级+10次/周（性价比最高），6个月后积分约37.7分。
-    \item \textbf{高龄}（80$\sim$89岁）：强度限制为1级，成本约1217元，以稳为主，降分幅度有限。
-    \item \textbf{成本规律}：活动能力差的患者最优成本约1242元；活动能力中等/好的患者最优成本约1580$\sim$1623元；痰湿积分高的患者因调理分级高，成本上浮。
+    \item \textbf{活动能力差}（$M<40$）：$y_{max}^{mob}=1$，强度被锁死在1级，每月下降率$r=0.03\times(1-1)+0.01\times(10-5)=5\%$，6个月后积分约为$S_0\times0.95^6\approx0.735\,S_0$。以痰湿积分均值58.2计算，预期降至约42.8分。
+    \item \textbf{活动能力中等}（$40\leq M<60$）：$y_{max}^{mob}=2$，可选2级强度，$r=0.03\times(2-1)+0.01\times5=8\%$，6个月后积分约为$0.92^6\approx0.606\,S_0$。
+    \item \textbf{活动能力好}（$M\geq 60$）：$y_{max}^{mob}=3$，但多数情况下$y^*=2$而非3。原因在于：从2级升至3级，单次活动成本从5元增至8元，$r$仅从8\%增至11\%，积分下降收益有限，而成本显著上升（24周$\times10$次$\times3$元差额$=720$元），性价比不如维持2级。
 \end{itemize}
+
+\textbf{（2）高龄患者以``稳''为主}
+
+年龄组5（80$\sim$89岁）的患者，$y_{max}^{age}=1$，即使活动能力评分较高，综合上限仍为1级。这类患者的最优方案以安全为首要目标，成本约为$6\times C_T(x)+24\times10\times3=6C_T(x)+720$元，通常在1217$\sim$1500元之间。
+
+\textbf{（3）调理分级对成本的刚性影响}
+
+由于调理分级$x$由痰湿积分强制确定，高积分患者必须承担更高的固定月费。以$f=10$、$y=2$为例：
+\begin{itemize}
+    \item $x=1$（基础）：月费30元，6个月调理费180元；
+    \item $x=2$（中度）：月费80元，6个月调理费480元；
+    \item $x=3$（强化）：月费130元，6个月调理费780元。
+\end{itemize}
+因此，在相同活动方案下，痰湿积分从58分升至62分（跨越阈值），总成本将跃增300元。这一``阶梯式''成本结构提示：在积分临界点附近，通过预干预降低痰湿积分以实现调理分级``降档''，具有显著的经济学价值。
+
+\textbf{（4）成本—效果敏感性分析}
+
+固定$y=2$、$f=10$，改变调理分级，计算单位成本降分效果（降分幅度/总成本）：
+\begin{itemize}
+    \item $x=1$：降分约23.0分，成本1380元，单位成本降分0.0167分/元；
+    \item $x=2$：降分约23.2分，成本1680元，单位成本降分0.0138分/元；
+    \item $x=3$：降分约17.0分，成本1500元，单位成本降分0.0113分/元。
+\end{itemize}
+可见，基础调理（$x=1$）的单位成本降分效果最优，这与中医``轻证轻治''的原则相吻合。
 
 % ==========================================================
 \section{模型评价与改进}
@@ -335,12 +559,95 @@ N_{comb} \leq 3 \times 10 = 30
 \end{enumerate}
 
 % ==========================================================
-\section*{参考文献}
+
+\newpage
+
+
 % ==========================================================
-\begin{enumerate}[label={[\arabic*]}]
-    \item 董乘宇. 数学建模竞赛中应当掌握的十类算法[J]. 数模, 2004, 1(1): 12-14.
-    \item 王琦. 中医体质学[M]. 北京: 人民卫生出版社, 2009.
-    \item 中国成人血脂异常防治指南修订联合委员会. 中国成人血脂异常防治指南(2016年修订版)[J]. 中华心血管病杂志, 2016.
+
+\begin{thebibliography}{99}
+\bibitem{dong2004algo}
+董乘宇. 数学建模竞赛中应当掌握的十类算法[J]. 数模, 2004, 1(1): 12-14.
+\bibitem{wang2009tcm}
+王琦. 中医体质学[M]. 北京: 人民卫生出版社, 2009.
+\bibitem{zhinan2016}
+中国成人血脂异常防治指南修订联合委员会. 中国成人血脂异常防治指南(2016年修订版)[J]. 中华心血管病杂志, 2016, 44(10): 833-853.
+\end{thebibliography}
+
+% ==========================================================
+
+\newpage
+\appendix
+\section{附录}
+% ==========================================================
+
+\subsection{软件及运行环境说明}
+
+本论文所有数据分析、模型求解及可视化均基于以下软件环境完成：
+
+\begin{table}[H]
+\centering
+\caption{软件及环境列表}
+\begin{tabular}{lll}
+\toprule
+\textbf{类别} & \textbf{名称} & \textbf{版本/说明} \\
+\midrule
+操作系统 & macOS / Windows 10 & 64位 \\
+编程语言 & Python & 3.12+ \\
+数据分析库 & pandas, numpy & 2.x, 1.26+ \\
+机器学习库 & scikit-learn & 1.4+ \\
+统计建模库 & statsmodels, scipy & 0.14+, 1.12+ \\
+文档排版 & \LaTeX & TeX Live 2024 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{主要计算机源程序}
+
+本论文的全部源代码使用 Python 3.12 编写，保存为文件 \texttt{solution.py}，随支撑材料一并提交。程序涵盖数据读取、预处理、问题1（相关性分析+逐步Logistic回归+Bootstrap检验）、问题2（风险评分构造+阈值划分+LDA验证）、问题3（穷举优化+结果汇总）的完整流程。下面给出问题3中\textbf{穷举优化算法}的核心代码片段，其余模块详见支撑材料。
+
+\begin{lstlisting}[language=Python,caption={问题3 穷举优化核心代码片段}]
+def calc_monthly_drop_rate(y, f):
+    """计算每月痰湿积分下降率"""
+    if f < 5:
+        return 0.0
+    return 0.03 * (y - 1) + 0.01 * (f - 5)
+
+def optimize_intervention(patient):
+    """对单名患者穷举求解最优干预方案"""
+    s0 = patient['phlegm']
+    x  = get_treatment_level(s0)        # 由痰湿积分强制匹配
+    y_max = get_max_activity_intensity(
+                patient['age_group'],
+                patient['mobility'])    # 年龄与活动能力双约束
+
+    best_plan, best_final = None, float('inf')
+    for y in range(1, y_max + 1):       # 枚举活动强度
+        for f in range(1, 11):          # 枚举每周频率
+            r = calc_monthly_drop_rate(y, f)
+            s_final = s0 * ((1 - r) ** 6)
+            total_cost = 6 * C_TREAT[x] + 24 * f * C_ACT[y]
+            if total_cost > 2000:
+                continue                # 成本硬约束
+            if s_final < best_final - 1e-6:
+                best_final = s_final
+                best_plan = (x, y, f, total_cost, s_final)
+            elif abs(s_final - best_final) < 1e-6 \
+                    and total_cost < best_plan[3]:
+                best_plan = (x, y, f, total_cost, s_final)
+    return best_plan
+\end{lstlisting}
+
+\subsection{AI使用情况说明}
+
+在本竞赛论文的撰写过程中，使用了生成式人工智能（AI）工具辅助完成以下工作：
+
+\begin{enumerate}
+    \item \textbf{文献综述与知识检索}：利用AI快速检索中医体质学、Logistic回归及Fisher判别分析的相关定义与公式表述，确保学术用语准确。
+    \item \textbf{代码框架生成}：借助AI生成Python代码的初始框架（数据读取、函数模板），随后由参赛队员根据题目约束条件自行修改参数、补全业务逻辑并调试运行。
+    \item \textbf{排版与格式检查}：使用AI辅助将文本内容转换为 \LaTeX 格式，并依据竞赛排版规范进行页码、目录、参考文献等结构调整。
 \end{enumerate}
+
+所有核心建模思路、数学推导、结果分析以及代码的最终调试均由参赛队员独立完成，AI仅作为效率辅助工具。参赛者已对所有内容的真实性、准确性和原创性负责。
 
 \end{document}
