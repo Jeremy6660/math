@@ -146,7 +146,7 @@ print(joint_score[joint_score['入选']].sort_values('r_高血脂', ascending=Fa
 # ---------- 1.4 逐步Logistic回归：筛选预警高血脂的关键指标 ----------
 
 def stepwise_logit(X, y, threshold_in=0.05, threshold_out=0.10):
-    """基于AIC的前向+后向逐步Logistic回归"""
+    """基于p-value阈值的前向+后向逐步Logistic回归"""
     included = []
     while True:
         changed = False
@@ -158,7 +158,8 @@ def stepwise_logit(X, y, threshold_in=0.05, threshold_out=0.10):
                 try:
                     model = sm.Logit(y, sm.add_constant(X[included + [col]])).fit(disp=0)
                     pvals[col] = model.pvalues[col]
-                except:
+                except Exception as e:
+                    print(f"    [警告] 变量 '{col}' 拟合失败（可能存在完全分离）: {e}")
                     pvals[col] = 1.0
             best_pval = pvals.min()
             if best_pval < threshold_in:
@@ -266,16 +267,14 @@ p3 = combo3['risk_level'].value_counts(normalize=True).get('高', 0)
 print(f"    痰湿为最高分体质 & 血脂异常>=2项  → 高风险概率: {p3:.2%} (n={len(combo3)})")
 
 # ---------- 2.4 K折分层交叉验证 ----------
-# 将三级风险转为二分类：高风险(1) vs 非高风险(0)，用于ROC/AUC
-df['high_risk'] = (df['risk_level'] == '高').astype(int)
-
+# 以高血脂二分类标签（disease）为金标准，评估基础Logistic回归的泛化能力
 skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 acc_scores, rec_scores, f1_scores, auc_scores = [], [], [], []
 
-print("\n【5】5折分层交叉验证结果（高风险 vs 非高风险）：")
-for fold, (train_idx, test_idx) in enumerate(skf.split(X_risk_scaled, df['high_risk']), 1):
+print("\n【5】5折分层交叉验证结果（高血脂 vs 非高血脂）：")
+for fold, (train_idx, test_idx) in enumerate(skf.split(X_risk_scaled, df['disease']), 1):
     X_train, X_test = X_risk_scaled[train_idx], X_risk_scaled[test_idx]
-    y_train, y_test = df['high_risk'].iloc[train_idx], df['high_risk'].iloc[test_idx]
+    y_train, y_test = df['disease'].iloc[train_idx], df['disease'].iloc[test_idx]
 
     logit_cv = LogisticRegression(max_iter=1000, random_state=42).fit(X_train, y_train)
     y_prob = logit_cv.predict_proba(X_test)[:, 1]
@@ -292,10 +291,10 @@ for fold, (train_idx, test_idx) in enumerate(skf.split(X_risk_scaled, df['high_r
 print(f"\n  均值: Acc={np.mean(acc_scores):.4f}, Recall={np.mean(rec_scores):.4f}, "
       f"F1={np.mean(f1_scores):.4f}, AUC={np.mean(auc_scores):.4f}")
 
-# 全量拟合用于ROC曲线
-logit_full = LogisticRegression(max_iter=1000, random_state=42).fit(X_risk_scaled, df['high_risk'])
+# 全量拟合用于ROC曲线（以disease为真实标签）
+logit_full = LogisticRegression(max_iter=1000, random_state=42).fit(X_risk_scaled, df['disease'])
 prob_full = logit_full.predict_proba(X_risk_scaled)[:, 1]
-fpr, tpr, _ = roc_curve(df['high_risk'], prob_full)
+fpr, tpr, _ = roc_curve(df['disease'], prob_full)
 
 # ---------- 2.5 风险评分权重敏感性分析 ----------
 # 使用固定阈值（基准阈值）观察权重扰动对分层比例的影响
