@@ -5,3 +5,5 @@
 *.vscode
 /output_figures
 /output
+/output_figures
+/figures

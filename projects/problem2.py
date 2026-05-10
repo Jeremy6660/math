@@ -93,7 +93,7 @@ print("        不能等同于发病前预警能力。")
 print("\n【2.2】第二层：治未病预警模型（非血脂指标预警）")
 # 排除血脂指标，使用体质、活动能力、基础信息、BMI、尿酸、血糖
 prevention_features = ['age_group', 'gender', 'smoke', 'drink', 'bmi', 'uric', 'glucose',
-                       'adl', 'iadl', 'mobility',
+                       'adl', 'iadl',
                        'pinghe', 'qixu', 'yangxu', 'yinxu', 'phlegm', 'shire', 'xueyu', 'qiyu', 'tebing']
 X_prev = df[prevention_features].fillna(df[prevention_features].mean())
 X_prev_scaled = StandardScaler().fit_transform(X_prev)
