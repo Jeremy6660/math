@@ -806,82 +806,48 @@ ID 1在6个月内仅下降4.47分（降幅7.0\%），干预效果相对有限。
 
 \subsection{主要计算机源程序}
 
-本论文的全部源代码使用 Python 3.12 编写，拆分为四个独立程序：\texttt{problem1.py}（特征筛选与体质贡献度）、\texttt{problem2.py}（两层风险预警模型）、\texttt{problem3.py}（动态逐月规划优化）、\texttt{figures.py}（论文图表生成），随支撑材料一并提交。下面给出问题3中\textbf{动态逐月规划}的核心代码片段，其余模块详见支撑材料。
+本论文的全部源代码使用 Python 3.12 编写，共包含 12 个程序文件，均存放于 \texttt{projects/} 目录下，随支撑材料一并提交。文件清单如下：
 
-\begin{lstlisting}[language=Python,caption={问题3 动态逐月规划核心代码}]
-def simulate_months(s0, y, f, age_group, mobility, months=6):
-    """逐月模拟干预过程，调理分级每月动态调整"""
-    s_current = s0
-    s_trajectory = [s_current]
-    x_trajectory = []
-    cost_trajectory = []
-    total_cost = 0
-    r = calc_monthly_drop_rate(y, f, age_group, mobility)
-    for _ in range(months):
-        x = get_treatment_level(s_current)  # 每月根据当前积分定级
-        monthly_cost = C_TREAT[x] + 4 * f * C_ACT[y]
-        total_cost += monthly_cost
-        if total_cost > MAX_COST:
-            return None                       # 超支，非法方案
-        x_trajectory.append(x)
-        cost_trajectory.append(monthly_cost)
-        s_current = s_current * (1 - r)
-        s_trajectory.append(s_current)
-    return {
-        's_trajectory': s_trajectory,
-        'x_trajectory': x_trajectory,
-        'cost_trajectory': cost_trajectory,
-        'total_cost': total_cost,
-        's_final': s_current
-    }
+\begin{itemize}
+    \item \texttt{problem1.py}：问题1——关键指标筛选与体质贡献度分析
+    \item \texttt{problem2.py}：问题2——三级风险预警模型
+    \item \texttt{problem3.py}：问题3——干预方案优化模型（动态逐月规划）
+    \item \texttt{figures.py}：综合制图程序（读取各问题输出数据绘制高质量图表）
+    \item \texttt{fig1a\_indicator\_correlation.py}：图1(a)——关键指标与目标变量的相关性对比
+    \item \texttt{fig1b\_constitution\_contribution.py}：图1(b)——九种体质贡献度对比
+    \item \texttt{fig2a\_roc\_comparison.py}：图2(a)——两层模型ROC曲线对比
+    \item \texttt{fig2b\_risk\_score\_distribution.py}：图2(b)——综合风险评分分布与阈值划分
+    \item \texttt{fig2c\_weight\_sensitivity.py}：图2(c)——风险评分权重敏感性分析
+    \item \texttt{fig3a\_intervention\_trajectory.py}：图3(a)——样本ID 1/2/3干预轨迹
+    \item \texttt{fig3b\_cost\_effect\_scatter.py}：图3(b)——278例患者成本-效果散点图
+    \item \texttt{fig3c\_compliance\_sensitivity.py}：图3(c)——依从性衰减敏感性分析
+\end{itemize}
 
-def optimize_intervention_dynamic(patient):
-    """动态逐月规划优化"""
-    s0 = patient['phlegm']
-    y_max = get_max_activity_intensity(
-                patient['age_group'], patient['mobility'])
-    best_plan, best_final = None, float('inf')
-    for y in range(1, y_max + 1):
-        for f in range(1, 11):
-            result = simulate_months(
-                        s0, y, f,
-                        patient['age_group'],
-                        patient['mobility'])
-            if result is None:
-                continue
-            if result['s_final'] < best_final - 1e-6:
-                best_final = result['s_final']
-                best_plan = {'y_level': y, 'freq': f, **result}
-            elif (abs(result['s_final'] - best_final) < 1e-6
-                    and result['total_cost'] < best_plan['total_cost']):
-                best_plan = {'y_level': y, 'freq': f, **result}
-    return best_plan
-\end{lstlisting}
+下面依次给出各文件的完整源代码。
 
-\begin{lstlisting}[language=Python,caption={阈值判定与下降率计算函数}]
-def get_treatment_level(s):
-    """根据当前痰湿积分确定调理分级"""
-    if s <= 58.5:
-        return 1
-    elif s < 62:
-        return 2
-    else:
-        return 3
+\lstinputlisting[language=Python, caption={problem1.py：问题1关键指标筛选与体质贡献度}]{projects/problem1.py}
 
-def calc_monthly_drop_rate(y, f, age_group, mobility):
-    """计算每月痰湿积分下降率，考虑依从性衰减"""
-    if f < 5:
-        return 0
-    if age_group == 5:          # 80~89岁
-        eta = min(5 + 0.5 * (f - 5), 6.0)
-    elif mobility < 40:         # 低活动能力
-        eta = min(5 + 0.6 * (f - 5), 6.2)
-    elif age_group in (3, 4):   # 60~79岁
-        eta = 5 + 0.8 * (f - 5)
-    else:                       # 40~59岁且活动能力正常
-        eta = f
-    return 0.03 * (y - 1) + 0.01 * (eta - 5)
-\end{lstlisting}
+\lstinputlisting[language=Python, caption={problem2.py：问题2三级风险预警模型}]{projects/problem2.py}
+
+\lstinputlisting[language=Python, caption={problem3.py：问题3干预方案优化模型}]{projects/problem3.py}
+
+\lstinputlisting[language=Python, caption={figures.py：综合制图程序}]{projects/figures.py}
+
+\lstinputlisting[language=Python, caption={fig1a\_indicator\_correlation.py：图1(a)相关性对比}]{projects/fig1a_indicator_correlation.py}
+
+\lstinputlisting[language=Python, caption={fig1b\_constitution\_contribution.py：图1(b)体质贡献度对比}]{projects/fig1b_constitution_contribution.py}
+
+\lstinputlisting[language=Python, caption={fig2a\_roc\_comparison.py：图2(a) ROC对比}]{projects/fig2a_roc_comparison.py}
+
+\lstinputlisting[language=Python, caption={fig2b\_risk\_score\_distribution.py：图2(b)风险评分分布}]{projects/fig2b_risk_score_distribution.py}
+
+\lstinputlisting[language=Python, caption={fig2c\_weight\_sensitivity.py：图2(c)权重敏感性分析}]{projects/fig2c_weight_sensitivity.py}
+
+\lstinputlisting[language=Python, caption={fig3a\_intervention\_trajectory.py：图3(a)干预轨迹}]{projects/fig3a_intervention_trajectory.py}
+
+\lstinputlisting[language=Python, caption={fig3b\_cost\_effect\_scatter.py：图3(b)成本-效果散点图}]{projects/fig3b_cost_effect_scatter.py}
+
+\lstinputlisting[language=Python, caption={fig3c\_compliance\_sensitivity.py：图3(c)依从性衰减敏感性分析}]{projects/fig3c_compliance_sensitivity.py}
 
 \subsection{AI使用情况说明}
 

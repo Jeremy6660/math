@@ -1,0 +1,182 @@
+\documentclass[a4paper,12pt]{ctexart}
+
+%================= 宏包加载 =================%
+\usepackage[left=2.5cm,right=2.5cm,top=2.5cm,bottom=2.5cm]{geometry} % 页面边距调整
+\usepackage{amsmath,amssymb} % 数学公式支持
+\usepackage{graphicx} % 插入图片支持
+\usepackage{booktabs} % 三线表支持
+\usepackage{float} % 浮动体控制
+\usepackage{array} % 表格扩展
+\usepackage{fancyhdr} % 页眉页脚控制
+\usepackage{lastpage} % 获取总页数
+\usepackage{hyperref} % 超链接及书签
+\usepackage[sort&compress]{gbt7714} % 国家标准 GB/T 7714-2015 参考文献格式
+\usepackage{listings} % 插入代码支持
+\usepackage{xcolor} % 颜色支持
+
+%================= 代码环境配置 =================%
+\lstset{
+    basicstyle=\small\ttfamily,
+    keywordstyle=\color{blue},
+    stringstyle=\color{red},
+    commentstyle=\color{green!50!black},
+    numbers=left,
+    numberstyle=\tiny\color{gray},
+    breaklines=true,
+    frame=single,
+    captionpos=b
+}
+
+%================= 超链接及目录样式配置 =================%
+\hypersetup{
+    colorlinks=true,
+    linkcolor=black,
+    citecolor=blue,
+    urlcolor=blue
+}
+
+%================= 页眉页脚配置 =================%
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0pt} % 取消页眉线
+% 注意：规范要求正文从第1页开始编号，我们在正文开始前重置页码
+
+\begin{document}
+
+% ------------------------- 第一页：首页 ------------------------- %
+\thispagestyle{empty} % 首页无页眉页脚
+
+% 右上角信息表格
+\begin{table}[H]
+    \centering
+    \renewcommand{\arraystretch}{1.5}
+    \begin{tabular}{|c|c|}
+        \hline
+        \makebox[3cm]{队伍编号} & \makebox[5cm]{} \\ \hline
+        \makebox[3cm]{题号} & \makebox[5cm]{（A/B/C/D）} \\ \hline
+    \end{tabular}
+\end{table}
+
+\vspace{1cm}
+
+% 论文题目
+\begin{center}
+    \LARGE \textbf{在此处输入您的论文题目}
+\end{center}
+
+\vspace{1cm}
+
+% 摘要部分
+\begin{center}
+    \Large \textbf{摘 \quad 要}
+\end{center}
+
+\vspace{0.5cm}
+
+（摘要正文）在此处输入您的摘要内容。摘要是论文的缩影，请简明扼要地概括您所解决的问题、使用的主要模型和方法、得出的关键结果以及主要结论。正文请控制在 25 页左右，思路清晰，表达简洁。请务必注意：**论文不能出现答题人身份等个人信息**。
+
+\vspace{1cm}
+
+\noindent \textbf{关键词：} 关键词1；关键词2；关键词3；关键词4
+
+\newpage
+
+% ------------------------- 第二页：目录页 ------------------------- %
+\thispagestyle{empty}
+\tableofcontents
+\newpage
+
+% ------------------------- 第三页：正文开始 ------------------------- %
+\setcounter{page}{1} % 正文页码从1开始连续编号
+\cfoot{第 \thepage \ 页 共 \pageref{LastPage} 页} % 设置页脚内容
+
+（这里开始论文正文）
+
+\section{问题重述}
+\subsection{问题背景}
+在此处写问题的背景信息。
+
+\subsection{问题提出}
+在此处简述题目要求解决的主要问题。
+
+\section{问题分析}
+在此处写对各个问题的分析。阐述解决问题的基本思路。
+
+\section{模型假设与符号说明}
+\subsection{模型假设}
+\begin{itemize}
+    \item 假设1：……
+    \item 假设2：……
+    \item 假设3：……
+\end{itemize}
+
+\subsection{符号说明}
+\begin{table}[H]
+    \centering
+    \begin{tabular}{cc}
+        \toprule
+        \textbf{符号} & \textbf{说明} \\
+        \midrule
+        $x$ & 变量说明1 \\
+        $\alpha$ & 参数说明2 \\
+        \bottomrule
+    \end{tabular}
+\end{table}
+
+\section{模型的建立与求解}
+\subsection{问题一的建立与求解}
+键入章标题(第 3 级)。这是正文测试，引用别人的成果必须按规范引用\cite{ref1}。
+
+\subsection{问题二的建立与求解}
+如果需要提交计算结果，请按照要求在指定表格填写，并另外统一提交 Excel 文件。
+
+% ------------------------- 参考文献 ------------------------- %
+\newpage
+\phantomsection
+\addcontentsline{toc}{section}{参考文献}
+% 按照 GB/T 7714-2015 格式列出参考文献
+% 可以使用 BibTeX，并在目录下创建一个 reference.bib 文件
+% \bibliography{reference} 
+% 下面提供的是手动填写的示例：
+\begin{thebibliography}{99}
+    \bibitem{ref1} 作者1, 作者2. 论文题目[J]. 期刊名称, 年份, 卷(期): 页码.
+    \bibitem{ref2} 作者名. 书名[M]. 出版地: 出版者, 年份.
+    \bibitem{ref3} 作者. 网上查到的公开资料[EB/OL]. (发布日期)[查阅日期]. URL地址.
+\end{thebibliography}
+
+% ------------------------- 附录 ------------------------- %
+\newpage
+\appendix
+\section*{附录}
+\addcontentsline{toc}{section}{附录}
+
+\subsection*{一、软件与环境说明}
+本论文在求解过程中，主要使用了以下软件及环境：
+\begin{itemize}
+    \item 编程语言：Python 3.9
+    \item 主要库：NumPy, Pandas, SciPy, Matplotlib
+    \item 其他软件：MATLAB R2022b (用于 XXX 模型求解)
+\end{itemize}
+
+\subsection*{二、AI 使用情况说明}
+(若未使用 AI，请写明“本论文撰写及代码编写均未使用生成式 AI”。若有使用，请如实写明用途，例如：)
+\par 本论文在撰写过程中，使用了 ChatGPT 辅助进行部分英文文献翻译及 LaTeX 代码的排版检查。所有模型设计与核心代码均由团队成员独立完成。
+
+\subsection*{三、核心源代码}
+以下是用于求解问题一的全部计算机源程序：
+
+\begin{lstlisting}[language=Python, caption={问题一求解核心代码}]
+import numpy as np
+import pandas as pd
+
+def solve_problem_1(data):
+    # 此处为求解逻辑
+    result = np.mean(data)
+    return result
+
+if __name__ == "__main__":
+    print("模型开始求解...")
+    # ...
+\end{lstlisting}
+
+\end{document}
