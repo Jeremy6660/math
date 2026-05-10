@@ -110,16 +110,16 @@ ax1.axvline(q90, color='red', linestyle='--', linewidth=1.5, label=f'中高阈�
 ax1.set_title('(a) 综合风险评分分布')
 ax1.legend(fontsize=8)
 
-# 2b: 两层模型ROC对比
+# 2b: 两层模型ROC对比（使用out-of-fold预测概率）
 ax2 = fig.add_subplot(gs[0, 1])
 from sklearn.metrics import roc_curve
-fpr_prev, tpr_prev, _ = roc_curve(result_df['disease'], result_df['prob_prev'])
+fpr_prev, tpr_prev, _ = roc_curve(result_df['disease'], result_df['oof_prob_prev'])
 auc_prev = np.trapezoid(tpr_prev, fpr_prev)
 ax2.plot(fpr_prev, tpr_prev, label=f'未病预警 AUC={auc_prev:.3f}', linewidth=2, color='steelblue')
 ax2.plot([0, 1], [0, 1], 'k--', label='Random', linewidth=1)
 ax2.set_xlabel('False Positive Rate')
 ax2.set_ylabel('True Positive Rate')
-ax2.set_title('(b) 未病预警模型ROC曲线')
+ax2.set_title('(b) 未病预警模型 out-of-fold ROC 曲线')
 ax2.legend()
 
 # 2c: 高风险人群年龄分布
@@ -146,15 +146,12 @@ ax4.tick_params(axis='x', rotation=15)
 
 # 2e: 核心特征组合条件概率
 ax5 = fig.add_subplot(gs[1, 1:])
-combo_data = pd.DataFrame({
-    '特征组合': ['痰湿≥60\n&活动<40', '痰湿≥60\n&BMI≥24\n&TG>1.7', '痰湿为最高体质\n&血脂异常≥2项'],
-    '高风险概率': [0.6154, 0.6667, 0.5376],  # 这些值需要从实际运行中获取，这里用近似值
-    '覆盖人数': [26, 18, 93]
-})
-bars = sns.barplot(data=combo_data, x='特征组合', y='高风险概率', ax=ax5, palette='Reds')
-ax5.set_title('(e) 核心特征组合高风险条件概率')
+combo_data = pd.read_csv('output/p2_feature_combos.csv')
+combo_data['特征组合'] = ['痰湿≥60\n&活动<40', '痰湿≥60\n&BMI≥24\n&TG>1.7', '痰湿为最高体质\n&血脂异常≥2项']
+bars = sns.barplot(data=combo_data, x='特征组合', y='高风险命中率', ax=ax5, palette='Reds')
+ax5.set_title('(e) 核心特征组合模型高风险分层命中率')
 ax5.set_ylim(0, 1)
-for i, (p, n) in enumerate(zip(combo_data['高风险概率'], combo_data['覆盖人数'])):
+for i, (p, n) in enumerate(zip(combo_data['高风险命中率'], combo_data['覆盖人数'])):
     ax5.text(i, p + 0.02, f'{p:.1%}\n(n={n})', ha='center', fontsize=9)
 
 plt.savefig('output/fig2_final_problem2.png', dpi=300, bbox_inches='tight')

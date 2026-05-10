@@ -75,14 +75,16 @@ X_diag_scaled = StandardScaler().fit_transform(X_diag)
 logit_diag = LogisticRegression(max_iter=1000, random_state=42).fit(X_diag_scaled, df['disease'])
 prob_diag = logit_diag.predict_proba(X_diag_scaled)[:, 1]
 
-# 5折CV评估现症识别模型
+# 5折CV评估现症识别模型（收集out-of-fold预测概率）
 skf = StratifiedKFold(n_splits=5, shuffle=True, random_state=42)
 auc_diag_cv = []
+oof_prob_diag = np.zeros(len(df))
 for train_idx, test_idx in skf.split(X_diag_scaled, df['disease']):
     X_tr, X_te = X_diag_scaled[train_idx], X_diag_scaled[test_idx]
     y_tr, y_te = df['disease'].iloc[train_idx], df['disease'].iloc[test_idx]
     model = LogisticRegression(max_iter=1000, random_state=42).fit(X_tr, y_tr)
     prob_te = model.predict_proba(X_te)[:, 1]
+    oof_prob_diag[test_idx] = prob_te
     auc_diag_cv.append(roc_auc_score(y_te, prob_te))
 
 print(f"  现症识别模型5折CV AUC: {np.mean(auc_diag_cv):.4f} (各折: {[round(a,4) for a in auc_diag_cv]})")
@@ -101,13 +103,15 @@ X_prev_scaled = StandardScaler().fit_transform(X_prev)
 logit_prev = LogisticRegression(max_iter=1000, random_state=42).fit(X_prev_scaled, df['disease'])
 prob_prev = logit_prev.predict_proba(X_prev_scaled)[:, 1]
 
-# 5折CV评估未病预警模型
+# 5折CV评估未病预警模型（收集out-of-fold预测概率）
 auc_prev_cv = []
+oof_prob_prev = np.zeros(len(df))
 for train_idx, test_idx in skf.split(X_prev_scaled, df['disease']):
     X_tr, X_te = X_prev_scaled[train_idx], X_prev_scaled[test_idx]
     y_tr, y_te = df['disease'].iloc[train_idx], df['disease'].iloc[test_idx]
     model = LogisticRegression(max_iter=1000, random_state=42).fit(X_tr, y_tr)
     prob_te = model.predict_proba(X_te)[:, 1]
+    oof_prob_prev[test_idx] = prob_te
     auc_prev_cv.append(roc_auc_score(y_te, prob_te))
 
 print(f"  未病预警模型5折CV AUC: {np.mean(auc_prev_cv):.4f} (各折: {[round(a,4) for a in auc_prev_cv]})")
@@ -216,10 +220,26 @@ for lvl in ['低', '中', '高']:
     cnt = level_counts.get(lvl, 0)
     print(f"    {lvl}风险: {cnt}例 ({cnt/len(df)*100:.1f}%)")
 
+# 分层与当前高血脂标签验证
+print("\n【2.5a】分层与当前高血脂标签验证：")
+for lvl in ['低', '中', '高']:
+    subset = df[df['risk_level'] == lvl]
+    rate = subset['disease'].mean()
+    print(f"    {lvl}风险组: n={len(subset)}, 当前高血脂率={rate:.2%}")
+from scipy.stats import chi2_contingency, spearmanr
+table = pd.crosstab(df['risk_level'], df['disease'])
+chi2, p_chi2, _, _ = chi2_contingency(table)
+risk_ord = df['risk_level'].map({'低': 0, '中': 1, '高': 2})
+r_trend, p_trend = spearmanr(risk_ord, df['disease'])
+print(f"    卡方检验: chi2={chi2:.4f}, p={p_chi2:.4f}")
+print(f"    趋势检验(Spearman): r={r_trend:.4f}, p={p_trend:.4f}")
+print("    说明：该分层并非单纯为复现当前诊断服务，而是结合痰湿体质与活动能力的干预优先级评分。")
+
 # ========================== 2.7 高风险人群画像（修正年龄分布） ==========================
 high_risk_group = df[df['risk_level'] == '高']
 print(f"\n【2.6】高风险人群画像（n={len(high_risk_group)}）：")
 print(f"  痰湿积分均值: {high_risk_group['phlegm'].mean():.2f}")
+print(f"  痰湿积分标准差: {high_risk_group['phlegm'].std():.2f}")
 print(f"  TG均值: {high_risk_group['tg'].mean():.2f}")
 print(f"  血脂异常风险项数均值: {high_risk_group['lipid_risk_cnt'].mean():.2f}")
 print(f"  活动量表总分均值: {high_risk_group['mobility'].mean():.2f}")
@@ -251,6 +271,19 @@ constitution_cols = ['pinghe', 'qixu', 'yangxu', 'yinxu', 'phlegm', 'shire', 'xu
 combo3 = df[(df[constitution_cols].idxmax(axis=1) == 'phlegm') & (df['lipid_risk_cnt'] >= 2)]
 p3 = combo3['risk_level'].value_counts(normalize=True).get('高', 0)
 print(f"  痰湿为最高体质 & 血脂异常>=2项  → 高风险概率: {p3:.2%} (n={len(combo3)})")
+
+# 保存核心特征组合结果
+combo_df = pd.DataFrame({
+    '特征组合': [
+        '痰湿≥60 & 活动总分<40',
+        '痰湿≥60 & BMI≥24 & TG>1.7',
+        '痰湿为最高体质 & 血脂异常≥2项'
+    ],
+    '高风险命中率': [p1, p2, p3],
+    '覆盖人数': [len(combo1), len(combo2), len(combo3)]
+})
+combo_df.to_csv('output/p2_feature_combos.csv', index=False)
+print("\n  核心特征组合已保存至 output/p2_feature_combos.csv")
 
 # 三层判定规则（指导教师B建议）
 print("\n【2.8】三层判定规则：")
@@ -290,7 +323,19 @@ for i, (w1, w2, w3, w4) in enumerate(perturbations, 1):
     dist = rl.value_counts(normalize=True).sort_index()
     print(f"  扰动{i}: 低={dist.get('低',0):.3f}, 中={dist.get('中',0):.3f}, 高={dist.get('高',0):.3f}")
 
-# ========================== 2.10 ROC曲线（两层模型） ==========================
+# ========================== 2.10 delta 敏感性分析 ==========================
+print("\n【2.10】痰湿体质标签修正系数 delta 敏感性分析：")
+print("  （delta=0.15 为经验参数，检验其对高风险比例的影响）")
+for d_test in [0, 0.12, 0.15, 0.18, 0.30]:
+    rs_test = (alpha * prob_prev +
+               beta * (df['phlegm'] / 100) +
+               gamma * ((100 - df['mobility']) / 100) +
+               d_test * (df['constitution'] == 5).astype(int))
+    rl_test = pd.cut(rs_test, bins=[-np.inf, low_threshold, high_threshold, np.inf], labels=['低', '中', '高'])
+    high_pct = (rl_test == '高').mean()
+    print(f"    delta={d_test:.2f}: 高风险比例={high_pct:.1%}")
+
+# ========================== 2.11 ROC曲线（两层模型） ==========================
 fpr_prev, tpr_prev, _ = roc_curve(df['disease'], prob_prev)
 
 # ========================== 保存结果 ==========================
@@ -301,6 +346,8 @@ result_df = pd.DataFrame({
     'disease': df['disease'],
     'prob_prev': prob_prev,
     'prob_diag': prob_diag,
+    'oof_prob_prev': oof_prob_prev,
+    'oof_prob_diag': oof_prob_diag,
     'phlegm': df['phlegm'],
     'mobility': df['mobility'],
     'constitution': df['constitution'],
