@@ -7,15 +7,15 @@ import numpy as np
 import matplotlib
 matplotlib.use('Agg')
 import matplotlib.pyplot as plt
-plt.rcParams['font.sans-serif'] = ['SimHei', 'Heiti TC', 'Arial Unicode MS']
-plt.rcParams['axes.unicode_minus'] = False
 import seaborn as sns
+sns.set(font='Arial Unicode MS')
+sns.set_style("whitegrid")
+
+plt.rcParams['font.sans-serif'] = ['Arial Unicode MS', 'Heiti TC', 'SimHei']
+plt.rcParams['axes.unicode_minus'] = False
 import os
 
 os.makedirs('output', exist_ok=True)
-
-# 设置全局样式
-sns.set_style("whitegrid")
 plt.rcParams['figure.dpi'] = 300
 
 print("=" * 60)
